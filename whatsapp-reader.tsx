@@ -28,7 +28,7 @@ export default function Component() {
 
   const [displayedMessages, setDisplayedMessages] = useState<Message[]>([])
   const [currentPage, setCurrentPage] = useState(0)
-  const [messagesPerPage] = useState(10000) // Show 10000 messages at a time
+  const [messagesPerPage] = useState(1000) // Show 1000 messages at a time
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   // Apply dark mode
@@ -55,7 +55,7 @@ export default function Component() {
     const iPhonePattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/
 
     // First pass - sample first 1000 lines to determine format and find current user
-    const sampleSize = Math.min(5000, lines.length)
+    const sampleSize = Math.min(1000, lines.length)
     let isIPhoneFormat = false
 
     for (let i = 0; i < sampleSize; i++) {
