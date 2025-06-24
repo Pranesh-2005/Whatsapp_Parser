@@ -7,7 +7,6 @@ export const metadata: Metadata = {
   icons: {
     icon: 'https://logodownload.org/wp-content/uploads/2015/04/whatsapp-logo-7.png',
   },
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({
