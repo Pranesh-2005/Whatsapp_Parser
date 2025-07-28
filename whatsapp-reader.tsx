@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Upload, Send, Phone, Video, MoreVertical, Search, Moon, Sun, X } from "lucide-react"
+import { Upload, Send, Phone, Video, MoreVertical, Search, Moon, Sun, X, Users, User } from "lucide-react"
 
 interface Message {
   timestamp: string
@@ -24,6 +24,8 @@ export default function Component() {
   const [searchResults, setSearchResults] = useState<number[]>([])
   const [currentSearchIndex, setCurrentSearchIndex] = useState<number>(0)
   const [darkMode, setDarkMode] = useState<boolean>(false)
+  const [selectedUser, setSelectedUser] = useState<string | null>(null) // null = all users, specific user = view as that user
+  const [availableUsers, setAvailableUsers] = useState<string[]>([])
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   const [displayedMessages, setDisplayedMessages] = useState<Message[]>([])
@@ -40,7 +42,75 @@ export default function Component() {
     }
   }, [darkMode])
 
-// ...existing code...
+  // Memoize filtered messages with updated isCurrentUser based on selectedUser
+  const filteredMessages = useMemo(() => {
+    if (selectedUser === null) {
+      return messages // Show all messages with original isCurrentUser
+    }
+    
+    // When a specific user is selected, show all messages but update isCurrentUser
+    return messages.map(message => ({
+      ...message,
+      isCurrentUser: message.sender === selectedUser
+    }))
+  }, [selectedUser, messages])
+
+  // Update displayed messages when view mode changes
+  useEffect(() => {
+    if (messages.length > 0) {
+      const initialMessages = filteredMessages.slice(0, messagesPerPage)
+      setDisplayedMessages(initialMessages)
+      setCurrentPage(1)
+    }
+  }, [selectedUser, messages, messagesPerPage])
+
+  // Cycle through users (only between the two users, no "all users" option)
+  const handleUserToggle = () => {
+    if (availableUsers.length === 0) return
+
+    if (selectedUser === null) {
+      // Start with first user
+      setSelectedUser(availableUsers[0])
+    } else {
+      // Find current user index and move to next
+      const currentIndex = availableUsers.indexOf(selectedUser)
+      const nextIndex = (currentIndex + 1) % availableUsers.length
+      setSelectedUser(availableUsers[nextIndex])
+    }
+  }
+
+  // Get display text for current view
+  const getViewModeText = () => {
+    if (selectedUser === null) {
+      return ""
+    }
+    return ` (Viewing as ${selectedUser})`
+  }
+
+  // Get appropriate icon (always show User icon since we're always viewing as a specific user)
+  const getViewModeIcon = () => {
+    return <User className="w-4 h-4" />
+  }
+
+  // Get tooltip text
+  const getTooltipText = () => {
+    if (selectedUser === null) {
+      return availableUsers.length > 0 ? `View as ${availableUsers[0]}` : "Switch user view"
+    } else {
+      const currentIndex = availableUsers.indexOf(selectedUser)
+      const nextIndex = (currentIndex + 1) % availableUsers.length
+      return `View as ${availableUsers[nextIndex]}`
+    }
+  }
+
+  // Get chat title based on selected user
+  const getChatTitle = () => {
+    if (selectedUser === null) {
+      return chatTitle
+    }
+    return `${selectedUser}_chat`
+  }
+
 // ...existing code...
 const parseWhatsAppFile = (content: string) => {
   console.log("File content preview:", content.substring(0, 500))
@@ -205,7 +275,6 @@ const parseWhatsAppFile = (content: string) => {
   console.log("Parsed messages count:", parsedMessages.length)
   return parsedMessages
 }
-// ...existing code...// ...existing code...
 
   const loadMoreMessages = () => {
     setIsLoadingMore(true)
@@ -213,7 +282,7 @@ const parseWhatsAppFile = (content: string) => {
     setTimeout(() => {
       const startIndex = currentPage * messagesPerPage
       const endIndex = startIndex + messagesPerPage
-      const newMessages = messages.slice(startIndex, endIndex)
+      const newMessages = filteredMessages.slice(startIndex, endIndex)
 
       setDisplayedMessages((prev) => [...prev, ...newMessages])
       setCurrentPage((prev) => prev + 1)
@@ -222,7 +291,7 @@ const parseWhatsAppFile = (content: string) => {
   }
 
   const loadInitialMessages = () => {
-    const initialMessages = messages.slice(0, messagesPerPage)
+    const initialMessages = filteredMessages.slice(0, messagesPerPage)
     setDisplayedMessages(initialMessages)
     setCurrentPage(1)
   }
@@ -253,12 +322,17 @@ const parseWhatsAppFile = (content: string) => {
       setMessages(parsedMessages)
       setChatTitle(file.name.replace(".txt", ""))
 
-      // Load initial batch of messages
-      const initialMessages = parsedMessages.slice(0, messagesPerPage)
-      setDisplayedMessages(initialMessages)
-      setCurrentPage(1)
+      // Extract unique users and set first user as default view
+      const uniqueUsers = Array.from(new Set(parsedMessages.map(msg => msg.sender)))
+      setAvailableUsers(uniqueUsers)
+      
+      // Start by viewing as "Pranesh" if available, otherwise first user
+      const defaultUser = uniqueUsers.includes("Pranesh") ? "Pranesh" : uniqueUsers[0]
+      setSelectedUser(defaultUser)
 
-      console.log(`Messages loaded: showing ${initialMessages.length} of ${parsedMessages.length} total`)
+      console.log(`Messages loaded: ${parsedMessages.length} total`)
+      console.log("Available users:", uniqueUsers)
+      console.log("Default viewing as:", defaultUser)
     } catch (error) {
       console.error("Error parsing file:", error)
       alert("Error reading file: " + (error as Error).message)
@@ -269,20 +343,30 @@ const parseWhatsAppFile = (content: string) => {
 
   const formatTime = (timestamp: string) => {
     try {
-      // Parse the WhatsApp timestamp format: DD/MM/YY, H:MM am/pm
-      const [datePart, timePart] = timestamp.split(", ")
+      // Parse the WhatsApp timestamp format: DD/MM/YY, H:MM am/pm or [DD/MM/YY, H:MM:SS AM/PM]
+      let datePart, timePart
+      
+      if (timestamp.includes("[") && timestamp.includes("]")) {
+        // iPhone format: [DD/MM/YY, H:MM:SS AM/PM]
+        const cleanTimestamp = timestamp.replace(/[\[\]]/g, "")
+        ;[datePart, timePart] = cleanTimestamp.split(", ")
+      } else {
+        // Android format: DD/MM/YY, H:MM am/pm
+        ;[datePart, timePart] = timestamp.split(", ")
+      }
+      
       const [day, month, year] = datePart.split("/")
 
-      // Handle am/pm time format
-      const timeMatch = timePart.match(/(\d{1,2}):(\d{2})\s(am|pm)/)
+      // Handle both am/pm and AM/PM formats, with or without seconds
+      const timeMatch = timePart.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s(am|pm|AM|PM)/)
       if (!timeMatch) return timestamp
 
-      const [, hour, minute, period] = timeMatch
+      const [, hour, minute, , period] = timeMatch
       let hour24 = Number.parseInt(hour)
 
-      if (period === "pm" && hour24 !== 12) {
+      if (period.toLowerCase() === "pm" && hour24 !== 12) {
         hour24 += 12
-      } else if (period === "am" && hour24 === 12) {
+      } else if (period.toLowerCase() === "am" && hour24 === 12) {
         hour24 = 0
       }
 
@@ -320,7 +404,7 @@ const parseWhatsAppFile = (content: string) => {
     }
 
     const query = searchQuery.toLowerCase()
-    const results = messages
+    const results = filteredMessages
       .map((message, index) => (message.content.toLowerCase().includes(query) ? index : -1))
       .filter((index) => index !== -1)
 
@@ -332,9 +416,9 @@ const parseWhatsAppFile = (content: string) => {
       const firstResultIndex = results[0]
       const pageWithResult = Math.floor(firstResultIndex / messagesPerPage)
       const startIndex = pageWithResult * messagesPerPage
-      const endIndex = Math.min(startIndex + messagesPerPage * 3, messages.length) // Load 3 pages worth
+      const endIndex = Math.min(startIndex + messagesPerPage * 3, filteredMessages.length) // Load 3 pages worth
 
-      setDisplayedMessages(messages.slice(startIndex, endIndex))
+      setDisplayedMessages(filteredMessages.slice(startIndex, endIndex))
       setCurrentPage(Math.ceil(endIndex / messagesPerPage))
 
       setTimeout(() => {
@@ -433,13 +517,14 @@ const parseWhatsAppFile = (content: string) => {
           <Avatar className="w-10 h-10">
             <AvatarImage src="/placeholder.svg" />
             <AvatarFallback className="bg-green-700 dark:bg-green-900 text-white">
-              {getInitials(chatTitle)}
+              {getInitials(getChatTitle())}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <h3 className="font-medium text-sm">{chatTitle}</h3>
+            <h3 className="font-medium text-sm">{getChatTitle()}</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Showing {displayedMessages.length} of {messages.length} messages
+              Showing {displayedMessages.length} of {filteredMessages.length} messages
+              {getViewModeText()}
             </p>
           </div>
           <div className="flex gap-1">
@@ -455,6 +540,15 @@ const parseWhatsAppFile = (content: string) => {
               variant="ghost"
               size="icon"
               className="w-8 h-8 text-white hover:bg-green-700 dark:hover:bg-green-900"
+              onClick={handleUserToggle}
+              title={getTooltipText()}
+            >
+              {getViewModeIcon()}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-white hover:bg-green-700 dark:hover:bg-green-900"
               onClick={() => setDarkMode(!darkMode)}
             >
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -465,13 +559,6 @@ const parseWhatsAppFile = (content: string) => {
               className="w-8 h-8 text-white hover:bg-green-700 dark:hover:bg-green-900"
             >
               <Video className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8 text-white hover:bg-green-700 dark:hover:bg-green-900"
-            >
-              <Phone className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
@@ -537,13 +624,13 @@ const parseWhatsAppFile = (content: string) => {
           }}
         >
           {displayedMessages.map((message, index) => {
-            const actualIndex = messages.indexOf(message)
+            const actualIndex = filteredMessages.indexOf(message)
             const isHighlighted =
               searchResults.includes(actualIndex) && searchResults[currentSearchIndex] === actualIndex
 
             return (
               <div
-                key={actualIndex}
+                key={`${message.timestamp}-${message.sender}-${index}`}
                 className={`flex ${message.isCurrentUser ? "justify-end" : "justify-start"} mb-1`}
                 data-message-index={actualIndex}
               >
@@ -575,7 +662,7 @@ const parseWhatsAppFile = (content: string) => {
           })}
 
           {/* Load More Button */}
-          {displayedMessages.length < messages.length && (
+          {displayedMessages.length < filteredMessages.length && (
             <div className="text-center py-4">
               <Button
                 onClick={loadMoreMessages}
@@ -583,7 +670,7 @@ const parseWhatsAppFile = (content: string) => {
                 variant="outline"
                 className="bg-white/80 dark:bg-gray-800/80"
               >
-                {isLoadingMore ? "Loading..." : `Load More (${messages.length - displayedMessages.length} remaining)`}
+                {isLoadingMore ? "Loading..." : `Load More (${filteredMessages.length - displayedMessages.length} remaining)`}
               </Button>
             </div>
           )}
