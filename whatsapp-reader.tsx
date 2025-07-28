@@ -111,169 +111,216 @@ export default function Component() {
     return `${selectedUser}_chat`
   }
 
-  const parseWhatsAppFile = (content: string) => {
-    console.log("File content preview:", content.substring(0, 500))
+// ...existing code...
 
-    const lines = content.split("\n")
-    const parsedMessages: Message[] = []
-    let currentUser = ""
-    const senderCounts = new Map<string, number>()
+const parseWhatsAppFile = (content: string) => {
+  console.log("File content preview:", content.substring(0, 500))
 
-    // Android format: DD/MM/YY, H:MM am/pm - Sender: Message
-    const androidPattern = /^(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:am|pm))\s-\s([^:]+):\s(.*)$/i
+  const lines = content.split("\n")
+  const parsedMessages: Message[] = []
+  let currentUser = ""
+  const senderCounts = new Map<string, number>()
 
-    // iPhone format with brackets: [DD/MM/YY, H:MM:SS AM/PM] Sender: Message
-    const iPhonePattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/i
+  // Android format: DD/MM/YY, H:MM am/pm - Sender: Message
+  const androidPattern = /^(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:am|pm))\s-\s([^:]+):\s(.*)$/i
 
-    // Alternative iPhone format without seconds: [DD/MM/YY, H:MM AM/PM] Sender: Message
-    const iPhonePatternNoSeconds = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/i
+  // iPhone format with brackets: [DD/MM/YY, H:MM:SS AM/PM] Sender: Message
+  const iPhonePattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/i
 
-    // First pass - sample first 1000 lines to determine format and find current user
-    const sampleSize = Math.min(1000, lines.length)
-    let isIPhoneFormat = false
-    let useSecondsFormat = false
+  // Alternative iPhone format without seconds: [DD/MM/YY, H:MM AM/PM] Sender: Message
+  const iPhonePatternNoSeconds = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/i
 
-    for (let i = 0; i < sampleSize; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
+  // iPhone format for messages with just timestamp and sender (empty content)
+  const iPhoneEmptyPattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}(?::\d{2})?\s(?:AM|PM))\]\s([^:]+):$/i
 
-      // Try iPhone format with seconds first
-      let match = line.match(iPhonePattern)
-      if (match) {
-        isIPhoneFormat = true
-        useSecondsFormat = true
-        const sender = match[2].trim()
-        senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
-        continue
-      }
+  // First pass - sample first 1000 lines to determine format and find current user
+  const sampleSize = Math.min(1000, lines.length)
+  let isIPhoneFormat = false
+  let useSecondsFormat = false
 
-      // Try iPhone format without seconds
-      match = line.match(iPhonePatternNoSeconds)
-      if (match) {
-        isIPhoneFormat = true
-        useSecondsFormat = false
-        const sender = match[2].trim()
-        senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
-        continue
-      }
+  for (let i = 0; i < sampleSize; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
 
-      // Try Android format
-      match = line.match(androidPattern)
-      if (match) {
-        const sender = match[2].trim()
-        senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
-      }
+    // Try iPhone format with seconds first
+    let match = line.match(iPhonePattern)
+    if (match) {
+      isIPhoneFormat = true
+      useSecondsFormat = true
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+      continue
     }
 
-    console.log("Format detected:", isIPhoneFormat ? `iPhone (${useSecondsFormat ? 'with seconds' : 'without seconds'})` : "Android")
-    console.log("Sender message counts:", Array.from(senderCounts.entries()))
-
-    // Set the sender with the most messages as current user
-    if (senderCounts.size > 0) {
-      currentUser = Array.from(senderCounts.entries()).reduce((a, b) => (a[1] > b[1] ? a : b))[0]
+    // Try iPhone format without seconds
+    match = line.match(iPhonePatternNoSeconds)
+    if (match) {
+      isIPhoneFormat = true
+      useSecondsFormat = false
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+      continue
     }
 
-    console.log("Current user set to:", currentUser)
+    // Try iPhone empty format
+    match = line.match(iPhoneEmptyPattern)
+    if (match) {
+      isIPhoneFormat = true
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+      continue
+    }
 
-    // Second pass - parse all messages with progress tracking
-    const messagePattern = isIPhoneFormat 
-      ? (useSecondsFormat ? iPhonePattern : iPhonePatternNoSeconds)
-      : androidPattern
-    let processedLines = 0
+    // Try Android format
+    match = line.match(androidPattern)
+    if (match) {
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+    }
+  }
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
+  console.log("Format detected:", isIPhoneFormat ? `iPhone (${useSecondsFormat ? 'with seconds' : 'without seconds'})` : "Android")
+  console.log("Sender message counts:", Array.from(senderCounts.entries()))
 
-      processedLines++
+  // Set the sender with the most messages as current user
+  if (senderCounts.size > 0) {
+    currentUser = Array.from(senderCounts.entries()).reduce((a, b) => (a[1] > b[1] ? a : b))[0]
+  }
 
-      // Show progress for large files
-      if (processedLines % 5000 === 0) {
-        console.log(`Processing... ${processedLines}/${lines.length} lines`)
-      }
+  console.log("Current user set to:", currentUser)
 
-      const match = line.match(messagePattern)
+  // Second pass - parse all messages with progress tracking
+  const messagePattern = isIPhoneFormat 
+    ? (useSecondsFormat ? iPhonePattern : iPhonePatternNoSeconds)
+    : androidPattern
+  const emptyPattern = isIPhoneFormat ? iPhoneEmptyPattern : null
+  let processedLines = 0
 
-      if (match) {
-        const [, timestamp, sender, content] = match
+  let currentMessage: {
+    timestamp: string
+    sender: string
+    content: string
+  } | null = null
 
-        // Skip ONLY actual system messages and file attachments - PRESERVE ALL EMOJIS
-        if (
-          content.includes("(file attached)") ||
-          content.includes("This message was deleted") ||
-          content.includes("Missed voice call") ||
-          content.includes("Missed video call") ||
-          content.includes("Voice call ended") ||
-          content.includes("Video call ended") ||
-          content.includes("Messages and calls are end-to-end encrypted") ||
-          content.includes("You're now an admin") ||
-          content.includes("changed the group name") ||
-          content.includes("added you") ||
-          content.includes("left") ||
-          content.includes("joined using this group's invite link") ||
-          content === "null" ||
-          content.trim() === ""
-        ) {
-          continue
-        }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
 
-        // Look ahead to collect multi-line messages
-        let fullContent = content.trim()
-        let nextLineIndex = i + 1
+    processedLines++
 
-        // Continue reading lines until we find the next message or reach end
-        while (nextLineIndex < lines.length) {
-          const nextLine = lines[nextLineIndex].trim()
-          
-          // If empty line, skip it
-          if (!nextLine) {
-            nextLineIndex++
-            continue
-          }
+    // Show progress for large files
+    if (processedLines % 5000 === 0) {
+      console.log(`Processing... ${processedLines}/${lines.length} lines`)
+    }
 
-          // Check if this line is a new message
-          const isNewMessage = nextLine.match(messagePattern)
-          
-          if (isNewMessage) {
-            // This is a new message, stop collecting
-            break
-          }
-
-          // Check if it's a system message we should skip
-          if (
-            nextLine.includes("Messages and calls are end-to-end encrypted") ||
-            nextLine.includes("changed the group name") ||
-            nextLine.includes("added you") ||
-            nextLine.includes("left") ||
-            nextLine.includes("joined using this group's invite link")
-          ) {
-            nextLineIndex++
-            continue
-          }
-
-          // Add this line to the current message content (this preserves emojis on new lines)
-          fullContent += "\n" + nextLine
-          nextLineIndex++
-        }
-
-        // Update the loop counter to skip the lines we've already processed
-        i = nextLineIndex - 1
-
-        // Only add if content is meaningful (not just whitespace or special characters)
-        if (fullContent.trim().length > 0) {
+    // Try to match full message pattern first
+    let match = line.match(messagePattern)
+    
+    if (match) {
+      // Save previous message if exists
+      if (currentMessage && currentMessage.content.trim().length > 0) {
+        // Skip system messages
+        if (!isSystemMessage(currentMessage.content)) {
           parsedMessages.push({
-            timestamp: timestamp.trim(),
-            sender: sender.trim(),
-            content: fullContent,
-            isCurrentUser: sender.trim() === currentUser,
+            timestamp: currentMessage.timestamp,
+            sender: currentMessage.sender,
+            content: currentMessage.content.trim(),
+            isCurrentUser: currentMessage.sender === currentUser,
           })
         }
       }
-    }
 
-    console.log("Parsed messages count:", parsedMessages.length)
-    return parsedMessages
+      // Start new message
+      const [, timestamp, sender, content] = match
+      currentMessage = {
+        timestamp: timestamp.trim(),
+        sender: sender.trim(), 
+        content: content.trim()
+      }
+    } else if (emptyPattern) {
+      // Try to match empty message pattern (iPhone format with just timestamp and sender)
+      match = line.match(emptyPattern)
+      
+      if (match) {
+        // Save previous message if exists
+        if (currentMessage && currentMessage.content.trim().length > 0) {
+          if (!isSystemMessage(currentMessage.content)) {
+            parsedMessages.push({
+              timestamp: currentMessage.timestamp,
+              sender: currentMessage.sender,
+              content: currentMessage.content.trim(),
+              isCurrentUser: currentMessage.sender === currentUser,
+            })
+          }
+        }
+
+        // Start new message with empty content
+        const [, timestamp, sender] = match
+        currentMessage = {
+          timestamp: timestamp.trim(),
+          sender: sender.trim(),
+          content: ""
+        }
+      } else if (currentMessage) {
+        // This is a continuation line - add to current message
+        if (currentMessage.content.length > 0) {
+          currentMessage.content += "\n" + line
+        } else {
+          currentMessage.content = line
+        }
+      }
+    } else if (currentMessage) {
+      // This is a continuation line - add to current message
+      if (currentMessage.content.length > 0) {
+        currentMessage.content += "\n" + line
+      } else {
+        currentMessage.content = line
+      }
+    }
   }
+
+  // Don't forget the last message
+  if (currentMessage && currentMessage.content.trim().length > 0) {
+    if (!isSystemMessage(currentMessage.content)) {
+      parsedMessages.push({
+        timestamp: currentMessage.timestamp,
+        sender: currentMessage.sender,
+        content: currentMessage.content.trim(),
+        isCurrentUser: currentMessage.sender === currentUser,
+      })
+    }
+  }
+
+  console.log("Parsed messages count:", parsedMessages.length)
+  return parsedMessages
+}
+
+// Helper function to check if message is a system message
+const isSystemMessage = (content: string): boolean => {
+  return (
+    content.includes("(file attached)") ||
+    content.includes("This message was deleted") ||
+    content.includes("Missed voice call") ||
+    content.includes("Missed video call") ||
+    content.includes("Voice call ended") ||
+    content.includes("Video call ended") ||
+    content.includes("Messages and calls are end-to-end encrypted") ||
+    content.includes("You're now an admin") ||
+    content.includes("changed the group name") ||
+    content.includes("added you") ||
+    content.includes("left") ||
+    content.includes("joined using this group's invite link") ||
+    content.includes("image omitted") ||
+    content.includes("video omitted") ||
+    content.includes("document omitted") ||
+    content.includes("sticker omitted") ||
+    content === "null" ||
+    content.trim() === "" ||
+    content.startsWith("‎") // Invisible character that WhatsApp uses
+  )
+}
+
+// ...existing code...
 
   const loadMoreMessages = () => {
     setIsLoadingMore(true)
