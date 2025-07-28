@@ -40,113 +40,172 @@ export default function Component() {
     }
   }, [darkMode])
 
-  const parseWhatsAppFile = (content: string) => {
-    console.log("File content preview:", content.substring(0, 500))
+// ...existing code...
+// ...existing code...
+const parseWhatsAppFile = (content: string) => {
+  console.log("File content preview:", content.substring(0, 500))
 
-    const lines = content.split("\n").filter((line) => line.trim() !== "")
-    const parsedMessages: Message[] = []
-    let currentUser = ""
-    const senderCounts = new Map<string, number>()
+  const lines = content.split("\n")
+  const parsedMessages: Message[] = []
+  let currentUser = ""
+  const senderCounts = new Map<string, number>()
 
-    // Android format: DD/MM/YY, H:MM am/pm - Sender: Message
-    const androidPattern = /^(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:am|pm))\s-\s([^:]+):\s(.*)$/
+  // Android format: DD/MM/YY, H:MM am/pm - Sender: Message
+  const androidPattern = /^(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:am|pm))\s-\s([^:]+):\s(.*)$/
 
-    // iPhone format: [DD/MM/YY, H:MM:SS AM/PM] Sender: Message
-    const iPhonePattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/
+  // iPhone format with brackets: [DD/MM/YY, H:MM:SS AM/PM] Sender: Message
+  const iPhonePattern = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/
 
-    // First pass - sample first 1000 lines to determine format and find current user
-    const sampleSize = Math.min(1000, lines.length)
-    let isIPhoneFormat = false
+  // Alternative iPhone format without seconds: [DD/MM/YY, H:MM AM/PM] Sender: Message
+  const iPhonePatternNoSeconds = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4},\s\d{1,2}:\d{2}\s(?:AM|PM))\]\s([^:]+):\s(.*)$/
 
-    for (let i = 0; i < sampleSize; i++) {
-      const line = lines[i]
+  // First pass - sample first 1000 lines to determine format and find current user
+  const sampleSize = Math.min(1000, lines.length)
+  let isIPhoneFormat = false
+  let useSecondsFormat = false
 
-      // Try iPhone format first
-      let match = line.match(iPhonePattern)
-      if (match) {
-        isIPhoneFormat = true
-        const sender = match[2].trim()
-        senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+  for (let i = 0; i < sampleSize; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    // Try iPhone format with seconds first
+    let match = line.match(iPhonePattern)
+    if (match) {
+      isIPhoneFormat = true
+      useSecondsFormat = true
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+      continue
+    }
+
+    // Try iPhone format without seconds
+    match = line.match(iPhonePatternNoSeconds)
+    if (match) {
+      isIPhoneFormat = true
+      useSecondsFormat = false
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+      continue
+    }
+
+    // Try Android format
+    match = line.match(androidPattern)
+    if (match) {
+      const sender = match[2].trim()
+      senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
+    }
+  }
+
+  console.log("Format detected:", isIPhoneFormat ? `iPhone (${useSecondsFormat ? 'with seconds' : 'without seconds'})` : "Android")
+  console.log("Sender message counts:", Array.from(senderCounts.entries()))
+
+  // Set the sender with the most messages as current user
+  if (senderCounts.size > 0) {
+    currentUser = Array.from(senderCounts.entries()).reduce((a, b) => (a[1] > b[1] ? a : b))[0]
+  }
+
+  console.log("Current user set to:", currentUser)
+
+  // Second pass - parse all messages with progress tracking
+  const messagePattern = isIPhoneFormat 
+    ? (useSecondsFormat ? iPhonePattern : iPhonePatternNoSeconds)
+    : androidPattern
+  let processedLines = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+
+    processedLines++
+
+    // Show progress for large files
+    if (processedLines % 5000 === 0) {
+      console.log(`Processing... ${processedLines}/${lines.length} lines`)
+    }
+
+    const match = line.match(messagePattern)
+
+    if (match) {
+      const [, timestamp, sender, content] = match
+
+      // Skip system messages and file attachments
+      if (
+        content.includes("(file attached)") ||
+        content.includes("This message was deleted") ||
+        content.includes("Missed voice call") ||
+        content.includes("Missed video call") ||
+        content.includes("‎sticker omitted") ||
+        content.includes("‎image omitted") ||
+        content.includes("‎document omitted") ||
+        content.includes("‎GIF omitted") ||
+        content.includes("Voice call,") ||
+        content.includes("Video call,") ||
+        content.includes("‎Voice call, ‎No answer") ||
+        content.includes("‎Video call, ‎No answer") ||
+        content.includes("‎Missed video call, ‎Tap to call back") ||
+        content.includes("Messages and calls are end-to-end encrypted") ||
+        content === "null" ||
+        content.trim() === "" ||
+        content.startsWith("‎") ||
+        content.includes("• ‎") ||
+        content.includes("pages ‎document omitted")
+      ) {
         continue
       }
 
-      // Try Android format
-      match = line.match(androidPattern)
-      if (match) {
-        const sender = match[2].trim()
-        senderCounts.set(sender, (senderCounts.get(sender) || 0) + 1)
-      }
-    }
+      // Look ahead to collect multi-line messages
+      let fullContent = content.trim()
+      let nextLineIndex = i + 1
 
-    console.log("Format detected:", isIPhoneFormat ? "iPhone" : "Android")
-    console.log("Sender message counts:", Array.from(senderCounts.entries()))
-
-    // Set the sender with the most messages as current user
-    if (senderCounts.size > 0) {
-      currentUser = Array.from(senderCounts.entries()).reduce((a, b) => (a[1] > b[1] ? a : b))[0]
-    }
-
-    console.log("Current user set to:", currentUser)
-
-    // Second pass - parse all messages with progress tracking
-    const messagePattern = isIPhoneFormat ? iPhonePattern : androidPattern
-    let processedLines = 0
-
-    for (const line of lines) {
-      processedLines++
-
-      // Show progress for large files
-      if (processedLines % 5000 === 0) {
-        console.log(`Processing... ${processedLines}/${lines.length} lines`)
-      }
-
-      const match = line.match(messagePattern)
-
-      if (match) {
-        const [, timestamp, sender, content] = match
-
-        // Skip system messages and file attachments
-        if (
-          content.includes("(file attached)") ||
-          content.includes("This message was deleted") ||
-          content.includes("Missed voice call") ||
-          content.includes("Missed video call") ||
-          content.includes("‎sticker omitted") ||
-          content.includes("‎image omitted") ||
-          content.includes("‎document omitted") ||
-          content.includes("‎GIF omitted") ||
-          content.includes("Voice call,") ||
-          content.includes("Video call,") ||
-          content.includes("‎Voice call, ‎No answer") ||
-          content.includes("‎Video call, ‎No answer") ||
-          content.includes("‎Missed video call, ‎Tap to call back") ||
-          content.includes("Messages and calls are end-to-end encrypted") ||
-          content === "null" ||
-          content.trim() === "" ||
-          content.startsWith("‎") ||
-          content.includes("• ‎") ||
-          content.includes("pages ‎document omitted")
-        ) {
+      // Continue reading lines until we find the next message or reach end
+      while (nextLineIndex < lines.length) {
+        const nextLine = lines[nextLineIndex].trim()
+        
+        // If empty line, skip it
+        if (!nextLine) {
+          nextLineIndex++
           continue
         }
 
-        parsedMessages.push({
-          timestamp: timestamp.trim(),
-          sender: sender.trim(),
-          content: content.trim(),
-          isCurrentUser: sender.trim() === currentUser,
-        })
-      } else if (line.trim() && !line.includes("Messages and calls are end-to-end encrypted")) {
-        // Add as continuation of previous message if exists
-        if (parsedMessages.length > 0) {
-          parsedMessages[parsedMessages.length - 1].content += "\n" + line.trim()
+        // Check if this line is a new message
+        const isNewMessage = nextLine.match(messagePattern)
+        
+        if (isNewMessage) {
+          // This is a new message, stop collecting
+          break
         }
-      }
-    }
 
-    console.log("Parsed messages count:", parsedMessages.length)
-    return parsedMessages
+        // Check if it's a system message we should skip
+        if (
+          nextLine.includes("Messages and calls are end-to-end encrypted") ||
+          nextLine.startsWith("‎") ||
+          nextLine.includes("• ‎")
+        ) {
+          nextLineIndex++
+          continue
+        }
+
+        // Add this line to the current message content
+        fullContent += "\n" + nextLine
+        nextLineIndex++
+      }
+
+      // Update the loop counter to skip the lines we've already processed
+      i = nextLineIndex - 1
+
+      parsedMessages.push({
+        timestamp: timestamp.trim(),
+        sender: sender.trim(),
+        content: fullContent,
+        isCurrentUser: sender.trim() === currentUser,
+      })
+    }
   }
+
+  console.log("Parsed messages count:", parsedMessages.length)
+  return parsedMessages
+}
+// ...existing code...// ...existing code...
 
   const loadMoreMessages = () => {
     setIsLoadingMore(true)
