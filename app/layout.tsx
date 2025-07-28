@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Script from 'next/script'
 
 export const metadata: Metadata = {
   title: 'WhatsApp Parser',
@@ -27,8 +28,9 @@ export const metadata: Metadata = {
   other: {
     'msapplication-TileColor': '#ffffff',
     'msapplication-TileImage': '/ms-icon-144x144.png',
-    'theme-color': '#ffffff'
-  }
+    'theme-color': '#25d366'
+  },
+  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no'
 }
 
 export default function RootLayout({
@@ -38,7 +40,34 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="WA Parser" />
+        <meta name="mobile-web-app-capable" content="yes" />
+      </head>
+      <body>
+        {children}
+        <Script
+          id="register-sw"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                      console.log('SW registered: ', registration);
+                    })
+                    .catch(function(registrationError) {
+                      console.log('SW registration failed: ', registrationError);
+                    });
+                });
+              }
+            `,
+          }}
+        />
+      </body>
     </html>
   )
 }
