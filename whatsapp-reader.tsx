@@ -700,12 +700,13 @@ const isSystemMessage = (content: string): boolean => {
                     <div className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">{message.sender}</div>
                   )}
                   <div 
-                    className="text-sm whitespace-pre-wrap break-words leading-relaxed"
+                    className="text-sm whitespace-pre-wrap break-words"
                     style={{ 
                       unicodeBidi: 'plaintext',
                       direction: 'ltr',
                       textRendering: 'optimizeLegibility',
-                      fontFeatureSettings: '"liga" 1, "calt" 1'
+                      fontFeatureSettings: '"liga" 1, "calt" 1',
+                      lineHeight: '1.3'
                     }}
                   >
                     {searchQuery.trim() ? highlightSearchTerms(message.content) : message.content}
