@@ -92,3 +92,70 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* WebKit Compatibility Fixes */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* User select support */
+* {
+  -webkit-user-select: inherit;
+  -moz-user-select: inherit;
+  -ms-user-select: inherit;
+  user-select: inherit;
+}
+
+/* Backdrop filter support for Tailwind classes */
+.backdrop-blur {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.backdrop-blur-sm {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.backdrop-blur-md {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.backdrop-blur-lg {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+.backdrop-blur-xl {
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+/* Mask image support */
+[style*="mask-image"] {
+  -webkit-mask-image: inherit;
+  mask-image: inherit;
+}
+
+/* Common mask utilities */
+.mask-gradient-to-b {
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+}
+
+.mask-gradient-to-t {
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+.mask-gradient-to-r {
+  -webkit-mask-image: linear-gradient(to right, black 0%, transparent 100%);
+  mask-image: linear-gradient(to right, black 0%, transparent 100%);
+}
+
+.mask-gradient-to-l {
+  -webkit-mask-image: linear-gradient(to left, black 0%, transparent 100%);
+  mask-image: linear-gradient(to left, black 0%, transparent 100%);
+}
